@@ -69,9 +69,18 @@ func (h *Handler) getResponse(ctx context.Context, req *rpcRequest) rpcResponse 
 		}
 	}
 
+	b, err := json.Marshal(result)
+	if err != nil {
+		return rpcResponse{
+			JSONRPC: "2.0",
+			Error:   &rpcError{Code: -32603, Message: "Internal error"},
+			Id:      req.Id,
+		}
+	}
+
 	return rpcResponse{
 		JSONRPC: "2.0",
-		Result:  result,
+		Result:  json.RawMessage(b),
 		Id:      req.Id,
 	}
 }

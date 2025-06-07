@@ -34,7 +34,7 @@ func (m *MockRPCContext) GetRequestBody(v any) error {
 
 	// Otherwise, use the request params if they exist
 	if m.req != nil && m.req.Params != nil {
-		return json.Unmarshal(*m.req.Params, v)
+		return json.Unmarshal(m.req.Params, v)
 	}
 
 	return nil
@@ -187,8 +187,9 @@ func TestHandler_Handle_Success(t *testing.T) {
 
 	assert.Nil(t, result.Error, "Expected no error in response")
 
-	resultMap, ok := result.Result.(map[string]any)
-	require.True(t, ok, "Expected map result")
+	var resultMap map[string]any
+	err = json.Unmarshal(result.Result, &resultMap)
+	require.NoError(t, err, "Failed to unmarshal result")
 
 	greeting, ok := resultMap["greeting"].(string)
 	assert.True(t, ok, "Expected string greeting")

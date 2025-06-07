@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockReader simulates various reader behaviors for testing
-type mockReader struct {
+// serverReader simulates various reader behaviors for testing
+type serverReader struct {
 	data    []byte
 	pos     int
 	err     error
@@ -24,7 +24,7 @@ type mockReader struct {
 	readErr bool
 }
 
-func (r *mockReader) Read(p []byte) (int, error) {
+func (r *serverReader) Read(p []byte) (int, error) {
 	if r.readErr {
 		return 0, r.err
 	}
@@ -97,7 +97,12 @@ func TestServer_Run(t *testing.T) {
 		assert.NoError(t, err, "Failed to parse response")
 
 		assert.Nil(t, resp.Error, "Got error response")
-		assert.Equal(t, "success", resp.Result, "Expected result 'success'")
+
+		// Unmarshal the Result field to get the actual string value
+		var result string
+		err = json.Unmarshal(resp.Result, &result)
+		assert.NoError(t, err, "Failed to unmarshal result")
+		assert.Equal(t, "success", result, "Expected result 'success'")
 	})
 
 	t.Run("ProcessMultipleRequests", func(t *testing.T) {
@@ -137,7 +142,7 @@ func TestServer_Run(t *testing.T) {
 	})
 
 	t.Run("HandleReaderError", func(t *testing.T) {
-		mockReader := &mockReader{
+		serverReader := &serverReader{
 			err:     io.ErrUnexpectedEOF,
 			readErr: true,
 		}
@@ -146,12 +151,12 @@ func TestServer_Run(t *testing.T) {
 		server := NewServer(handler)
 		var output bytes.Buffer
 
-		err := server.Run(context.Background(), mockReader, &output)
+		err := server.Run(context.Background(), serverReader, &output)
 		assert.Equal(t, io.ErrUnexpectedEOF, err, "Expected io.ErrUnexpectedEOF")
 	})
 
 	t.Run("HandleEOF", func(t *testing.T) {
-		mockReader := &mockReader{
+		serverReader := &serverReader{
 			data: []byte{}, // Empty data will trigger EOF
 		}
 
@@ -159,7 +164,7 @@ func TestServer_Run(t *testing.T) {
 		server := NewServer(handler)
 		var output bytes.Buffer
 
-		err := server.Run(context.Background(), mockReader, &output)
+		err := server.Run(context.Background(), serverReader, &output)
 		assert.NoError(t, err, "Expected no error on EOF")
 	})
 
@@ -266,11 +271,11 @@ func TestReadInput(t *testing.T) {
 	})
 
 	t.Run("Error", func(t *testing.T) {
-		mockReader := &mockReader{
+		serverReader := &serverReader{
 			err:     io.ErrUnexpectedEOF,
 			readErr: true,
 		}
-		reader := bufio.NewReader(mockReader)
+		reader := bufio.NewReader(serverReader)
 
 		data := make([]byte, 0, 64)
 		err := readInput(reader, &data)

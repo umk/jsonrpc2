@@ -36,10 +36,8 @@ type rpcContext struct {
 }
 
 func (r *rpcContext) GetRequestBody(v any) error {
-	if r.req.Params != nil {
-		if err := json.Unmarshal(*r.req.Params, v); err != nil {
-			return rpcParseError{err: err}
-		}
+	if err := json.Unmarshal(r.req.Params, v); err != nil {
+		return rpcParseError{err: err}
 	}
 
 	if err := Val.Struct(v); err != nil {
