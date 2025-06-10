@@ -1,7 +1,6 @@
 package jsonrpc2
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -227,47 +226,47 @@ func TestServer_Run(t *testing.T) {
 	})
 }
 
-func TestReadInput(t *testing.T) {
+func TestMessageReader_read(t *testing.T) {
 	t.Run("SingleLine", func(t *testing.T) {
 		input := "test input\n"
-		reader := bufio.NewReader(strings.NewReader(input))
+		reader := newMessageReader(strings.NewReader(input))
 
 		data := make([]byte, 0, 64)
-		err := readInput(reader, &data)
+		err := reader.read(&data)
 
-		assert.NoError(t, err, "readInput() error")
-		assert.Equal(t, "test input", string(data), "readInput() incorrect data")
+		assert.NoError(t, err, "messageReader.read() error")
+		assert.Equal(t, "test input", string(data), "messageReader.read() incorrect data")
 	})
 
 	t.Run("MultiLine", func(t *testing.T) {
 		input := "line 1\nline 2\n"
-		reader := bufio.NewReader(strings.NewReader(input))
+		reader := newMessageReader(strings.NewReader(input))
 
 		// First call should read "line 1"
 		data := make([]byte, 0, 64)
-		err := readInput(reader, &data)
+		err := reader.read(&data)
 
-		assert.NoError(t, err, "readInput() first call error")
-		assert.Equal(t, "line 1", string(data), "readInput() first line incorrect")
+		assert.NoError(t, err, "messageReader.read() first call error")
+		assert.Equal(t, "line 1", string(data), "messageReader.read() first line incorrect")
 
 		// Second call should read "line 2"
 		data = data[:0]
-		err = readInput(reader, &data)
+		err = reader.read(&data)
 
-		assert.NoError(t, err, "readInput() second call error")
-		assert.Equal(t, "line 2", string(data), "readInput() second line incorrect")
+		assert.NoError(t, err, "messageReader.read() second call error")
+		assert.Equal(t, "line 2", string(data), "messageReader.read() second line incorrect")
 	})
 
 	t.Run("LongLine", func(t *testing.T) {
 		// Generate a long line that will exceed the default buffer
 		longLine := strings.Repeat("a", 8192) + "\n"
-		reader := bufio.NewReader(strings.NewReader(longLine))
+		reader := newMessageReader(strings.NewReader(longLine))
 
 		data := make([]byte, 0, 64)
-		err := readInput(reader, &data)
+		err := reader.read(&data)
 
-		assert.NoError(t, err, "readInput() error")
-		assert.Equal(t, 8192, len(data), "readInput() incorrect length")
+		assert.NoError(t, err, "messageReader.read() error")
+		assert.Equal(t, 8192, len(data), "messageReader.read() incorrect length")
 	})
 
 	t.Run("Error", func(t *testing.T) {
@@ -275,10 +274,10 @@ func TestReadInput(t *testing.T) {
 			err:     io.ErrUnexpectedEOF,
 			readErr: true,
 		}
-		reader := bufio.NewReader(serverReader)
+		reader := newMessageReader(serverReader)
 
 		data := make([]byte, 0, 64)
-		err := readInput(reader, &data)
+		err := reader.read(&data)
 
 		assert.Equal(t, io.ErrUnexpectedEOF, err, "Expected io.ErrUnexpectedEOF")
 	})
@@ -286,12 +285,12 @@ func TestReadInput(t *testing.T) {
 	t.Run("NoNewline", func(t *testing.T) {
 		// Input without a trailing newline
 		input := "input without newline"
-		reader := bufio.NewReader(strings.NewReader(input))
+		reader := newMessageReader(strings.NewReader(input))
 
 		data := make([]byte, 0, 64)
-		err := readInput(reader, &data)
+		err := reader.read(&data)
 
-		assert.NoError(t, err, "readInput() error")
-		assert.Equal(t, "input without newline", string(data), "readInput() incorrect data")
+		assert.NoError(t, err, "messageReader.read() error")
+		assert.Equal(t, "input without newline", string(data), "messageReader.read() incorrect data")
 	})
 }

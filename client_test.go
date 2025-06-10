@@ -26,7 +26,7 @@ func TestClientCall_Success(t *testing.T) {
 	defer outW.Close()
 
 	client := NewClient(inR, outW)
-	go func() { _ = client.Read() }()
+	go func() { _ = client.Run() }()
 
 	handler := NewHandler(map[string]HandlerFunc{
 		"world": func(ctx context.Context, c RPCContext) (any, error) {
@@ -51,7 +51,7 @@ func TestClientCall_ErrorResponse(t *testing.T) {
 	defer outW.Close()
 
 	client := NewClient(inR, outW)
-	go func() { _ = client.Read() }()
+	go func() { _ = client.Run() }()
 
 	handler := NewHandler(map[string]HandlerFunc{
 		"foo": func(ctx context.Context, c RPCContext) (any, error) {
@@ -76,7 +76,7 @@ func TestClientCall_IgnoreInvalidThenSuccess(t *testing.T) {
 	defer outW.Close()
 
 	client := NewClient(inR, outW)
-	go func() { _ = client.Read() }()
+	go func() { _ = client.Run() }()
 
 	handler := NewHandler(map[string]HandlerFunc{
 		"ignored": func(ctx context.Context, c RPCContext) (any, error) {
@@ -107,7 +107,7 @@ func TestClientRead_BadJSON(t *testing.T) {
 		w.Close()
 	}()
 
-	err := client.Read()
+	err := client.Run()
 	require.Error(t, err)
 	var syntaxErr *json.SyntaxError
 	require.ErrorAs(t, err, &syntaxErr)

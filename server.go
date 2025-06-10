@@ -1,7 +1,6 @@
 package jsonrpc2
 
 import (
-	"bufio"
 	"context"
 	"io"
 	"log"
@@ -44,14 +43,14 @@ func NewServer(handler *Handler, opts ...ServerOption) *Server {
 
 func (s *Server) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 	var wg sync.WaitGroup
-	var mu sync.Mutex
+	writer := newMessageWriter(out)
+	reader := newMessageReader(in)
 
 	defer wg.Wait()
 
-	reader := bufio.NewReader(in)
 	for {
 		data := s.bufferPool.Get(0)
-		if err := readInput(reader, data); err != nil {
+		if err := reader.read(data); err != nil {
 			s.bufferPool.Put(data)
 			if err == io.EOF {
 				return nil
@@ -71,11 +70,9 @@ func (s *Server) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 			}
 
 			if resp != nil {
-				mu.Lock()
-				defer mu.Unlock()
-
-				out.Write(resp)
-				out.Write(separator)
+				if err := writer.write(resp); err != nil {
+					log.Println("Error writing response:", err)
+				}
 			}
 		}(data)
 	}

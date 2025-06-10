@@ -1,7 +1,6 @@
 package jsonrpc2
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,8 +31,8 @@ type Client struct {
 
 	currentId int64
 
-	in  io.Reader
-	out io.Writer
+	reader *messageReader
+	writer *messageWriter
 
 	requests   map[string]chan<- any
 	bufferPool *slices.SlicePool[byte]
@@ -64,19 +63,17 @@ func NewClient(in io.Reader, out io.Writer, opts ...ClientOption) *Client {
 	}
 
 	return &Client{
-		in:         in,
-		out:        out,
+		reader:     newMessageReader(in),
+		writer:     newMessageWriter(out),
 		requests:   make(map[string]chan<- any),
 		bufferPool: slices.NewSlicePool[byte](options.requestSize),
 	}
 }
 
-func (c *Client) Read() error {
-	reader := bufio.NewReader(c.in)
-
+func (c *Client) Run() error {
 	for {
 		data := c.bufferPool.Get(0)
-		if err := readInput(reader, data); err != nil {
+		if err := c.reader.read(data); err != nil {
 			c.bufferPool.Put(data)
 			if err == io.EOF {
 				return nil
@@ -155,14 +152,14 @@ func (c *Client) requestReceive(message []byte) error {
 		return nil
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	var id string
 	if err := json.Unmarshal(resp.Id, &id); err != nil {
 		// Continue processing messages without terminating the process.
 		return nil
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if ch, ok := c.requests[id]; ok {
 		ch <- resp
@@ -187,8 +184,11 @@ func (c *Client) requestSend(id string, req rpcRequest) (chan any, error) {
 	ch := make(chan any, 1)
 	c.requests[id] = ch
 
-	c.out.Write(content)
-	c.out.Write(separator)
+	if err := c.writer.write(content); err != nil {
+		delete(c.requests, id)
+		close(ch)
+		return nil, fmt.Errorf("failed to write request: %w", err)
+	}
 
 	return ch, nil
 }
