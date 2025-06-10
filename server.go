@@ -10,15 +10,13 @@ import (
 	"github.com/umk/jsonrpc2/internal/slices"
 )
 
-var separator = []byte{'\n'}
-
 type ServerOption func(*serverOptions)
 
 type serverOptions struct {
 	requestSize int
 }
 
-func WithRequestSize(size int) ServerOption {
+func WithServerRequestSize(size int) ServerOption {
 	return func(opts *serverOptions) {
 		opts.requestSize = size
 	}
@@ -31,7 +29,7 @@ type Server struct {
 
 func NewServer(handler *Handler, opts ...ServerOption) *Server {
 	options := &serverOptions{
-		requestSize: 4 * 1024,
+		requestSize: defaultRequestSize,
 	}
 
 	for _, opt := range opts {
@@ -81,20 +79,4 @@ func (s *Server) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 			}
 		}(data)
 	}
-}
-
-func readInput(reader *bufio.Reader, input *[]byte) error {
-	*input = (*input)[:0]
-
-	for proceed := true; proceed; {
-		line, isPrefix, err := reader.ReadLine()
-		if err != nil {
-			return err
-		}
-
-		*input = append(*input, line...)
-		proceed = isPrefix
-	}
-
-	return nil
 }

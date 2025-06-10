@@ -58,7 +58,7 @@ func TestNewServer(t *testing.T) {
 	t.Run("WithCustomOptions", func(t *testing.T) {
 		handler := NewHandler(nil)
 		customSize := 8192
-		server := NewServer(handler, WithRequestSize(customSize))
+		server := NewServer(handler, WithServerRequestSize(customSize))
 
 		require.NotNil(t, server, "Expected non-nil server")
 		assert.Equal(t, handler, server.handler, "Handler not correctly set")

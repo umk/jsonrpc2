@@ -11,7 +11,21 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+
+	"github.com/umk/jsonrpc2/internal/slices"
 )
+
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	requestSize int
+}
+
+func WithClientRequestSize(size int) ClientOption {
+	return func(opts *clientOptions) {
+		opts.requestSize = size
+	}
+}
 
 type Client struct {
 	mu sync.Mutex
@@ -21,10 +35,11 @@ type Client struct {
 	in  io.Reader
 	out io.Writer
 
-	requests map[string]chan<- any
+	requests   map[string]chan<- any
+	bufferPool *slices.SlicePool[byte]
 }
 
-func NewClient(cmd *exec.Cmd) (*Client, error) {
+func NewClientFromCmd(cmd *exec.Cmd, opts ...ClientOption) (*Client, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("failed to pipe Stdout: %w", err)
@@ -35,36 +50,45 @@ func NewClient(cmd *exec.Cmd) (*Client, error) {
 		return nil, fmt.Errorf("failed to pipe Stdin: %w", err)
 	}
 
-	return &Client{
-		in:  stdout,
-		out: stdin,
-
-		requests: make(map[string]chan<- any),
-	}, nil
+	c := NewClient(stdout, stdin, opts...)
+	return c, nil
 }
 
-func NewClientFromInOut(in io.Reader, out io.Writer) *Client {
+func NewClient(in io.Reader, out io.Writer, opts ...ClientOption) *Client {
+	options := &clientOptions{
+		requestSize: 4 * 1024,
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return &Client{
-		in:       in,
-		out:      out,
-		requests: make(map[string]chan<- any),
+		in:         in,
+		out:        out,
+		requests:   make(map[string]chan<- any),
+		bufferPool: slices.NewSlicePool[byte](options.requestSize),
 	}
 }
 
 func (c *Client) Read() error {
-	s := bufio.NewScanner(c.in)
+	reader := bufio.NewReader(c.in)
 
-	for s.Scan() {
-		if err := c.requestReceive(s.Bytes()); err != nil {
+	for {
+		data := c.bufferPool.Get(0)
+		if err := readInput(reader, data); err != nil {
+			c.bufferPool.Put(data)
+			if err == io.EOF {
+				return nil
+			}
+			return fmt.Errorf("failed to read message: %w", err)
+		}
+
+		if err := c.requestReceive(*data); err != nil {
+			c.bufferPool.Put(data)
 			return err
 		}
 	}
-
-	if err := s.Err(); err != nil {
-		return fmt.Errorf("failed to read messages: %w", err)
-	}
-
-	return nil
 }
 
 func (c *Client) Call(ctx context.Context, method string, req any, resp any) error {
@@ -163,10 +187,8 @@ func (c *Client) requestSend(id string, req rpcRequest) (chan any, error) {
 	ch := make(chan any, 1)
 	c.requests[id] = ch
 
-	if _, err := fmt.Fprintln(c.out, string(content)); err != nil {
-		// Caller is responsible to clean up request upon failure
-		return nil, err
-	}
+	c.out.Write(content)
+	c.out.Write(separator)
 
 	return ch, nil
 }

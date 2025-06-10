@@ -25,7 +25,7 @@ func TestClientCall_Success(t *testing.T) {
 	outR, outW := io.Pipe()
 	defer outW.Close()
 
-	client := NewClientFromInOut(inR, outW)
+	client := NewClient(inR, outW)
 	go func() { _ = client.Read() }()
 
 	handler := NewHandler(map[string]HandlerFunc{
@@ -50,7 +50,7 @@ func TestClientCall_ErrorResponse(t *testing.T) {
 	outR, outW := io.Pipe()
 	defer outW.Close()
 
-	client := NewClientFromInOut(inR, outW)
+	client := NewClient(inR, outW)
 	go func() { _ = client.Read() }()
 
 	handler := NewHandler(map[string]HandlerFunc{
@@ -75,7 +75,7 @@ func TestClientCall_IgnoreInvalidThenSuccess(t *testing.T) {
 	outR, outW := io.Pipe()
 	defer outW.Close()
 
-	client := NewClientFromInOut(inR, outW)
+	client := NewClient(inR, outW)
 	go func() { _ = client.Read() }()
 
 	handler := NewHandler(map[string]HandlerFunc{
@@ -99,7 +99,7 @@ func TestClientCall_IgnoreInvalidThenSuccess(t *testing.T) {
 
 func TestClientRead_BadJSON(t *testing.T) {
 	r, w := io.Pipe()
-	client := NewClientFromInOut(r, io.Discard)
+	client := NewClient(r, io.Discard)
 
 	// send malformed JSON to client
 	go func() {
