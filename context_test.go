@@ -32,11 +32,9 @@ func TestRPCParseError(t *testing.T) {
 
 func TestGetRequestBody_WithParams(t *testing.T) {
 	// Create sample JSON params
-	req := &rpcRequest{
+	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"name":"John","age":30}`),
-	}
-
-	ctx := &rpcContext{req: req}
+	}}
 	var data person
 
 	err := ctx.GetRequestBody(&data)
@@ -48,11 +46,9 @@ func TestGetRequestBody_WithParams(t *testing.T) {
 
 func TestGetRequestBody_InvalidJSON(t *testing.T) {
 	// Create invalid JSON params
-	req := &rpcRequest{
+	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"name":"John","age":invalid}`),
-	}
-
-	ctx := &rpcContext{req: req}
+	}}
 	var data person
 
 	err := ctx.GetRequestBody(&data)
@@ -69,11 +65,9 @@ func TestGetRequestBody_InvalidJSON(t *testing.T) {
 
 func TestGetRequestBody_NoParams(t *testing.T) {
 	// Request with nil params
-	req := &rpcRequest{
+	ctx := &rpcContext{req: rpcRequest{
 		Params: nil,
-	}
-
-	ctx := &rpcContext{req: req}
+	}}
 	var data person
 
 	err := ctx.GetRequestBody(&data)
@@ -86,11 +80,9 @@ func TestGetRequestBody_NoParams(t *testing.T) {
 
 func TestGetRequestBody_ValidationFailed(t *testing.T) {
 	// Create params with invalid value (required field missing)
-	req := &rpcRequest{
+	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"age":30}`),
-	}
-
-	ctx := &rpcContext{req: req}
+	}}
 	var data person
 
 	err := ctx.GetRequestBody(&data)
@@ -107,11 +99,9 @@ func TestGetRequestBody_ValidationFailed(t *testing.T) {
 
 func TestGetRequestBody_NegativeAgeValidationFailed(t *testing.T) {
 	// Create params with invalid value (age negative)
-	req := &rpcRequest{
+	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"name":"John","age":-5}`),
-	}
-
-	ctx := &rpcContext{req: req}
+	}}
 	var data person
 
 	err := ctx.GetRequestBody(&data)

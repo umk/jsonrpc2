@@ -32,7 +32,7 @@ type RPCContext interface {
 }
 
 type rpcContext struct {
-	req *rpcRequest
+	req rpcRequest
 }
 
 func (r *rpcContext) GetRequestBody(v any) error {

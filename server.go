@@ -2,78 +2,46 @@ package jsonrpc2
 
 import (
 	"context"
-	"io"
-	"log"
-	"sync"
-
-	"github.com/umk/jsonrpc2/internal/slices"
+	"encoding/json"
 )
 
-type ServerOption func(*serverOptions)
-
-type serverOptions struct {
-	requestSize int
+type serverCore struct {
+	writer  *messageWriter
+	handler *Handler
 }
 
-func WithServerRequestSize(size int) ServerOption {
-	return func(opts *serverOptions) {
-		opts.requestSize = size
+func newServerCore(writer *messageWriter, handler *Handler) *serverCore {
+	return &serverCore{
+		writer:  writer,
+		handler: handler,
 	}
 }
 
-type Server struct {
-	handler    *Handler
-	bufferPool *slices.SlicePool[byte]
-}
-
-func NewServer(handler *Handler, opts ...ServerOption) *Server {
-	options := &serverOptions{
-		requestSize: defaultRequestSize,
-	}
-
-	for _, opt := range opts {
-		opt(options)
-	}
-
-	return &Server{
-		handler:    handler,
-		bufferPool: slices.NewSlicePool[byte](options.requestSize),
-	}
-}
-
-func (s *Server) Run(ctx context.Context, in io.Reader, out io.Writer) error {
-	var wg sync.WaitGroup
-	writer := newMessageWriter(out)
-	reader := newMessageReader(in)
-
-	defer wg.Wait()
-
-	for {
-		data := s.bufferPool.Get(0)
-		if err := reader.read(data); err != nil {
-			s.bufferPool.Put(data)
-			if err == io.EOF {
-				return nil
-			}
-			return err
+func (s *serverCore) request(ctx context.Context, message message[rpcRequest]) error {
+	var req rpcRequest
+	if err := message.Get(&req); err != nil {
+		resp := rpcResponse{
+			JSONRPC: "2.0",
+			Error:   &rpcError{Code: -32700, Message: "Parse error"},
 		}
-
-		wg.Add(1)
-		go func(data *[]byte) {
-			defer wg.Done()
-			defer s.bufferPool.Put(data)
-
-			resp, err := s.handler.Handle(ctx, *data)
-			if err != nil {
-				log.Println("Error processing request:", err)
-				return
-			}
-
-			if resp != nil {
-				if err := writer.write(resp); err != nil {
-					log.Println("Error writing response:", err)
-				}
-			}
-		}(data)
+		if b, err := json.Marshal(resp); err != nil {
+			// Do nothing
+		} else if err := s.writer.Write(b); err != nil {
+			// Do nothing
+		}
+		return getDispatchError(err)
 	}
+
+	resp := s.handler.Handle(ctx, req)
+
+	if resp.ID == nil {
+		return nil
+	}
+
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return err
+	}
+
+	return s.writer.Write(b)
 }

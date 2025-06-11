@@ -5,91 +5,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os/exec"
 	"strconv"
 	"sync"
 	"sync/atomic"
-
-	"github.com/umk/jsonrpc2/internal/slices"
 )
 
-type ClientOption func(*clientOptions)
-
-type clientOptions struct {
-	requestSize int
+type Client interface {
+	Call(ctx context.Context, method string, req any, resp any) error
 }
 
-func WithClientRequestSize(size int) ClientOption {
-	return func(opts *clientOptions) {
-		opts.requestSize = size
-	}
-}
-
-type Client struct {
+type clientCore struct {
 	mu sync.Mutex
 
-	currentId int64
+	currentID int64 // used to generate unique request IDs
 
-	reader *messageReader
-	writer *messageWriter
-
-	requests   map[string]chan<- any
-	bufferPool *slices.SlicePool[byte]
+	writer   *messageWriter
+	requests map[string]chan<- any // map of request IDs to channels for responses
 }
 
-func NewClientFromCmd(cmd *exec.Cmd, opts ...ClientOption) (*Client, error) {
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("failed to pipe Stdout: %w", err)
-	}
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("failed to pipe Stdin: %w", err)
-	}
-
-	c := NewClient(stdout, stdin, opts...)
-	return c, nil
-}
-
-func NewClient(in io.Reader, out io.Writer, opts ...ClientOption) *Client {
-	options := &clientOptions{
-		requestSize: 4 * 1024,
-	}
-
-	for _, opt := range opts {
-		opt(options)
-	}
-
-	return &Client{
-		reader:     newMessageReader(in),
-		writer:     newMessageWriter(out),
-		requests:   make(map[string]chan<- any),
-		bufferPool: slices.NewSlicePool[byte](options.requestSize),
+func newClientCore(writer *messageWriter) *clientCore {
+	return &clientCore{
+		writer:   writer,
+		requests: make(map[string]chan<- any),
 	}
 }
 
-func (c *Client) Run() error {
-	for {
-		data := c.bufferPool.Get(0)
-		if err := c.reader.read(data); err != nil {
-			c.bufferPool.Put(data)
-			if err == io.EOF {
-				return nil
-			}
-			return fmt.Errorf("failed to read message: %w", err)
-		}
-
-		if err := c.requestReceive(*data); err != nil {
-			c.bufferPool.Put(data)
-			return err
-		}
-	}
-}
-
-func (c *Client) Call(ctx context.Context, method string, req any, resp any) error {
-	id := strconv.FormatInt(atomic.AddInt64(&c.currentId, 1), 36)
+func (c *clientCore) Call(ctx context.Context, method string, req any, resp any) error {
+	id := strconv.FormatInt(atomic.AddInt64(&c.currentID, 1), 36)
 
 	bid, err := json.Marshal(id)
 	if err != nil {
@@ -107,7 +49,7 @@ func (c *Client) Call(ctx context.Context, method string, req any, resp any) err
 		JSONRPC: "2.0",
 		Method:  method,
 		Params:  json.RawMessage(breq),
-		Id:      json.RawMessage(bid),
+		ID:      json.RawMessage(bid),
 	})
 	if err != nil {
 		return err
@@ -134,33 +76,23 @@ func (c *Client) Call(ctx context.Context, method string, req any, resp any) err
 	}
 }
 
-func (c *Client) requestReceive(message []byte) error {
+func (c *clientCore) resolve(message message[rpcResponse]) error {
 	var resp rpcResponse
-	if err := json.Unmarshal(message, &resp); err != nil {
-		var syntaxErr *json.SyntaxError
-		if errors.As(err, &syntaxErr) {
-			// A syntax error is a protocol violation that may result in an undefined
-			// behavior, so the error is returned with further termination of the process.
-			return err
-		}
-		// Continue processing messages without terminating the process.
-		return nil
-	}
-
-	if err := Val.Struct(&resp); err != nil {
-		// Continue processing messages without terminating the process.
-		return nil
+	if err := message.Get(&resp); err != nil {
+		return getDispatchError(err)
 	}
 
 	var id string
-	if err := json.Unmarshal(resp.Id, &id); err != nil {
-		// Continue processing messages without terminating the process.
+	if err := json.Unmarshal(resp.ID, &id); err != nil {
+		// If ID is not a valid string, the request won't be found in the
+		// requests map, so can safely discard the response.
 		return nil
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Request is closed by the caller.
 	if ch, ok := c.requests[id]; ok {
 		ch <- resp
 	}
@@ -168,7 +100,7 @@ func (c *Client) requestReceive(message []byte) error {
 	return nil
 }
 
-func (c *Client) requestSend(id string, req rpcRequest) (chan any, error) {
+func (c *clientCore) requestSend(id string, req rpcRequest) (chan any, error) {
 	content, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -184,7 +116,7 @@ func (c *Client) requestSend(id string, req rpcRequest) (chan any, error) {
 	ch := make(chan any, 1)
 	c.requests[id] = ch
 
-	if err := c.writer.write(content); err != nil {
+	if err := c.writer.Write(content); err != nil {
 		delete(c.requests, id)
 		close(ch)
 		return nil, fmt.Errorf("failed to write request: %w", err)
@@ -193,7 +125,7 @@ func (c *Client) requestSend(id string, req rpcRequest) (chan any, error) {
 	return ch, nil
 }
 
-func (c *Client) requestClose(id string) {
+func (c *clientCore) requestClose(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

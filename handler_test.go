@@ -64,70 +64,71 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestHandler_Handle_ParseError(t *testing.T) {
-	handler := NewHandler(nil)
-
-	// Invalid JSON
-	data := []byte(`{"jsonrpc": "2.0", "method": "test", "params": {,}}`)
-
-	resp, err := handler.Handle(context.Background(), data)
-	require.NoError(t, err, "Expected no error")
-
-	var result rpcResponse
-	err = json.Unmarshal(resp, &result)
-	require.NoError(t, err, "Failed to unmarshal response")
-
-	require.NotNil(t, result.Error, "Expected error response")
-	assert.Equal(t, -32700, result.Error.Code, "Expected parse error code")
-	assert.Equal(t, "Parse error", result.Error.Message, "Expected 'Parse error' message")
+	// Note: This test might not be applicable anymore since we're passing
+	// rpcRequest objects directly instead of parsing JSON
+	t.Skip("Parse error test is no longer applicable with direct rpcRequest handling")
 }
 
 func TestHandler_Handle_InvalidRequest(t *testing.T) {
 	handler := NewHandler(nil)
 
 	testCases := []struct {
-		name        string
-		requestJSON string
-		expectCode  int
-		expectMsg   string
+		name       string
+		request    rpcRequest
+		expectCode int
+		expectMsg  string
 	}{
 		{
-			name:        "Missing JSONRPC Version",
-			requestJSON: `{"method": "test", "params": {}, "id": 1}`,
-			expectCode:  -32600,
-			expectMsg:   "Invalid request",
+			name: "Missing JSONRPC Version",
+			request: rpcRequest{
+				Method: "test",
+				Params: json.RawMessage(`{}`),
+				ID:     json.RawMessage(`1`),
+			},
+			expectCode: -32600,
+			expectMsg:  "Invalid request",
 		},
 		{
-			name:        "Wrong JSONRPC Version",
-			requestJSON: `{"jsonrpc": "1.0", "method": "test", "params": {}, "id": 1}`,
-			expectCode:  -32600,
-			expectMsg:   "Invalid request",
+			name: "Wrong JSONRPC Version",
+			request: rpcRequest{
+				JSONRPC: "1.0",
+				Method:  "test",
+				Params:  json.RawMessage(`{}`),
+				ID:      json.RawMessage(`1`),
+			},
+			expectCode: -32600,
+			expectMsg:  "Invalid request",
 		},
 		{
-			name:        "Missing Method",
-			requestJSON: `{"jsonrpc": "2.0", "params": {}, "id": 1}`,
-			expectCode:  -32600,
-			expectMsg:   "Invalid request",
+			name: "Missing Method",
+			request: rpcRequest{
+				JSONRPC: "2.0",
+				Params:  json.RawMessage(`{}`),
+				ID:      json.RawMessage(`1`),
+			},
+			expectCode: -32600,
+			expectMsg:  "Invalid request",
 		},
 		{
-			name:        "Empty Method",
-			requestJSON: `{"jsonrpc": "2.0", "method": "", "params": {}, "id": 1}`,
-			expectCode:  -32600,
-			expectMsg:   "Invalid request",
+			name: "Empty Method",
+			request: rpcRequest{
+				JSONRPC: "2.0",
+				Method:  "",
+				Params:  json.RawMessage(`{}`),
+				ID:      json.RawMessage(`1`),
+			},
+			expectCode: -32600,
+			expectMsg:  "Invalid request",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := handler.Handle(context.Background(), []byte(tc.requestJSON))
-			require.NoError(t, err, "Expected no error")
+			resp := handler.Handle(context.Background(), tc.request)
 
-			var result rpcResponse
-			err = json.Unmarshal(resp, &result)
-			require.NoError(t, err, "Failed to unmarshal response")
-
-			require.NotNil(t, result.Error, "Expected error response")
-			assert.Equal(t, tc.expectCode, result.Error.Code, "Wrong error code")
-			assert.Equal(t, tc.expectMsg, result.Error.Message, "Wrong error message")
+			require.NotNil(t, resp.Error, "Expected error response")
+			assert.Equal(t, tc.expectCode, resp.Error.Code, "Wrong error code")
+			assert.Equal(t, tc.expectMsg, resp.Error.Message, "Wrong error message")
 		})
 	}
 }
@@ -139,18 +140,18 @@ func TestHandler_Handle_MethodNotFound(t *testing.T) {
 		},
 	})
 
-	data := []byte(`{"jsonrpc": "2.0", "method": "nonExistingMethod", "params": {}, "id": 1}`)
+	req := rpcRequest{
+		JSONRPC: "2.0",
+		Method:  "nonExistingMethod",
+		Params:  json.RawMessage(`{}`),
+		ID:      json.RawMessage(`1`),
+	}
 
-	resp, err := handler.Handle(context.Background(), data)
-	require.NoError(t, err, "Expected no error")
+	resp := handler.Handle(context.Background(), req)
 
-	var result rpcResponse
-	err = json.Unmarshal(resp, &result)
-	require.NoError(t, err, "Failed to unmarshal response")
-
-	require.NotNil(t, result.Error, "Expected error response")
-	assert.Equal(t, -32601, result.Error.Code, "Expected method not found code")
-	assert.Equal(t, "Method not found", result.Error.Message, "Expected 'Method not found' message")
+	require.NotNil(t, resp.Error, "Expected error response")
+	assert.Equal(t, -32601, resp.Error.Code, "Expected method not found code")
+	assert.Equal(t, "Method not found", resp.Error.Message, "Expected 'Method not found' message")
 }
 
 func TestHandler_Handle_Success(t *testing.T) {
@@ -171,24 +172,19 @@ func TestHandler_Handle_Success(t *testing.T) {
 		},
 	})
 
-	data := []byte(`{
-		"jsonrpc": "2.0", 
-		"method": "testMethod", 
-		"params": {"name": "John", "age": 30}, 
-		"id": 123
-	}`)
+	req := rpcRequest{
+		JSONRPC: "2.0",
+		Method:  "testMethod",
+		Params:  json.RawMessage(`{"name": "John", "age": 30}`),
+		ID:      json.RawMessage(`123`),
+	}
 
-	resp, err := handler.Handle(context.Background(), data)
-	require.NoError(t, err, "Expected no error")
+	resp := handler.Handle(context.Background(), req)
 
-	var result rpcResponse
-	err = json.Unmarshal(resp, &result)
-	require.NoError(t, err, "Failed to unmarshal response")
-
-	assert.Nil(t, result.Error, "Expected no error in response")
+	assert.Nil(t, resp.Error, "Expected no error in response")
 
 	var resultMap map[string]any
-	err = json.Unmarshal(result.Result, &resultMap)
+	err := json.Unmarshal(resp.Result, &resultMap)
 	require.NoError(t, err, "Failed to unmarshal result")
 
 	greeting, ok := resultMap["greeting"].(string)
@@ -201,7 +197,7 @@ func TestHandler_Handle_Success(t *testing.T) {
 
 	// Check ID is passed through
 	var id float64
-	idBytes, _ := json.Marshal(result.Id)
+	idBytes, _ := json.Marshal(resp.ID)
 	json.Unmarshal(idBytes, &id)
 	assert.Equal(t, float64(123), id, "Expected id 123")
 }
@@ -223,34 +219,32 @@ func TestHandler_Handle_HandlerError(t *testing.T) {
 	})
 
 	t.Run("RPC Error", func(t *testing.T) {
-		data := []byte(`{"jsonrpc": "2.0", "method": "errorMethod", "id": 1}`)
+		req := rpcRequest{
+			JSONRPC: "2.0",
+			Method:  "errorMethod",
+			ID:      json.RawMessage(`1`),
+		}
 
-		resp, err := handler.Handle(context.Background(), data)
-		require.NoError(t, err, "Expected no error")
+		resp := handler.Handle(context.Background(), req)
 
-		var result rpcResponse
-		err = json.Unmarshal(resp, &result)
-		require.NoError(t, err, "Failed to unmarshal response")
-
-		require.NotNil(t, result.Error, "Expected error response")
-		assert.Equal(t, customErr.Code, result.Error.Code, "Wrong error code")
-		assert.Equal(t, customErr.Message, result.Error.Message, "Wrong error message")
-		assert.Equal(t, customErr.Data, result.Error.Data, "Wrong error data")
+		require.NotNil(t, resp.Error, "Expected error response")
+		assert.Equal(t, customErr.Code, resp.Error.Code, "Wrong error code")
+		assert.Equal(t, customErr.Message, resp.Error.Message, "Wrong error message")
+		assert.Equal(t, customErr.Data, resp.Error.Data, "Wrong error data")
 	})
 
 	t.Run("Regular Error", func(t *testing.T) {
-		data := []byte(`{"jsonrpc": "2.0", "method": "regularError", "id": 1}`)
+		req := rpcRequest{
+			JSONRPC: "2.0",
+			Method:  "regularError",
+			ID:      json.RawMessage(`1`),
+		}
 
-		resp, err := handler.Handle(context.Background(), data)
-		require.NoError(t, err, "Expected no error")
+		resp := handler.Handle(context.Background(), req)
 
-		var result rpcResponse
-		err = json.Unmarshal(resp, &result)
-		require.NoError(t, err, "Failed to unmarshal response")
-
-		require.NotNil(t, result.Error, "Expected error response")
-		assert.Equal(t, -32603, result.Error.Code, "Expected internal error code")
-		assert.Equal(t, "Internal error", result.Error.Message, "Expected 'Internal error' message")
+		require.NotNil(t, resp.Error, "Expected error response")
+		assert.Equal(t, -32603, resp.Error.Code, "Expected internal error code")
+		assert.Equal(t, "Internal error", resp.Error.Message, "Expected 'Internal error' message")
 	})
 }
 
@@ -265,10 +259,14 @@ func TestHandler_Handle_Notification(t *testing.T) {
 	})
 
 	// Notification request (no ID)
-	data := []byte(`{"jsonrpc": "2.0", "method": "notificationMethod", "params": {}}`)
+	req := rpcRequest{
+		JSONRPC: "2.0",
+		Method:  "notificationMethod",
+		Params:  json.RawMessage(`{}`),
+	}
 
-	resp, err := handler.Handle(context.Background(), data)
-	assert.NoError(t, err, "Expected no error")
-	assert.Nil(t, resp, "Expected nil response for notification")
+	resp := handler.Handle(context.Background(), req)
+
+	assert.Nil(t, resp.ID, "Expected nil request ID for notification")
 	assert.True(t, methodCalled, "Expected notification method to be called")
 }

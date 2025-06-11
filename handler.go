@@ -16,31 +16,12 @@ func NewHandler(funcs map[string]HandlerFunc) *Handler {
 	return &Handler{funcs: funcs}
 }
 
-func (h *Handler) Handle(ctx context.Context, data []byte) ([]byte, error) {
-	var req rpcRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		resp := rpcResponse{
-			JSONRPC: "2.0",
-			Error:   &rpcError{Code: -32700, Message: "Parse error"},
-		}
-		return json.Marshal(resp)
-	}
-
-	resp := h.getResponse(ctx, &req)
-
-	if resp.Id == nil {
-		return nil, nil
-	}
-
-	return json.Marshal(resp)
-}
-
-func (h *Handler) getResponse(ctx context.Context, req *rpcRequest) rpcResponse {
+func (h *Handler) Handle(ctx context.Context, req rpcRequest) rpcResponse {
 	if req.JSONRPC != "2.0" || req.Method == "" {
 		return rpcResponse{
 			JSONRPC: "2.0",
 			Error:   &rpcError{Code: -32600, Message: "Invalid request"},
-			Id:      req.Id,
+			ID:      req.ID,
 		}
 	}
 
@@ -49,7 +30,7 @@ func (h *Handler) getResponse(ctx context.Context, req *rpcRequest) rpcResponse 
 		return rpcResponse{
 			JSONRPC: "2.0",
 			Error:   &rpcError{Code: -32601, Message: "Method not found"},
-			Id:      req.Id,
+			ID:      req.ID,
 		}
 	}
 
@@ -65,8 +46,12 @@ func (h *Handler) getResponse(ctx context.Context, req *rpcRequest) rpcResponse 
 				Message: rpcErr.Message,
 				Data:    rpcErr.Data,
 			},
-			Id: req.Id,
+			ID: req.ID,
 		}
+	}
+
+	if req.ID == nil {
+		return rpcResponse{}
 	}
 
 	b, err := json.Marshal(result)
@@ -74,13 +59,13 @@ func (h *Handler) getResponse(ctx context.Context, req *rpcRequest) rpcResponse 
 		return rpcResponse{
 			JSONRPC: "2.0",
 			Error:   &rpcError{Code: -32603, Message: "Internal error"},
-			Id:      req.Id,
+			ID:      req.ID,
 		}
 	}
 
 	return rpcResponse{
 		JSONRPC: "2.0",
 		Result:  json.RawMessage(b),
-		Id:      req.Id,
+		ID:      req.ID,
 	}
 }
