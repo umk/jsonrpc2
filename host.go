@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os/exec"
 	"sync"
 
@@ -109,7 +108,7 @@ func (h *Host) Run(ctx context.Context) error {
 			defer h.bufs.Put(buf)
 
 			if err := h.dispatcher.dispatch(ctx, *buf); err != nil {
-				log.Println("Error processing message:", err)
+				// Do nothing
 			}
 		}(buf)
 	}

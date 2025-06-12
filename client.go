@@ -117,8 +117,6 @@ func (c *clientCore) requestSend(id string, req rpcRequest) (chan any, error) {
 	c.requests[id] = ch
 
 	if err := c.writer.Write(content); err != nil {
-		delete(c.requests, id)
-		close(ch)
 		return nil, fmt.Errorf("failed to write request: %w", err)
 	}
 
@@ -130,7 +128,7 @@ func (c *clientCore) requestClose(id string) {
 	defer c.mu.Unlock()
 
 	if ch, ok := c.requests[id]; ok {
-		close(ch)
 		delete(c.requests, id)
+		close(ch)
 	}
 }
