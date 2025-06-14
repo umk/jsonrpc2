@@ -3,11 +3,7 @@ package jsonrpc2
 import (
 	"encoding/json"
 	"errors"
-
-	"github.com/go-playground/validator/v10"
 )
-
-var Val = validator.New(validator.WithRequiredStructEnabled())
 
 // rpcParseError represents an error that occurred while parsing an RPC request.
 type rpcParseError struct {
@@ -40,7 +36,7 @@ func (r *rpcContext) GetRequestBody(v any) error {
 		return rpcParseError{err: err}
 	}
 
-	if err := Val.Struct(v); err != nil {
+	if err := validateIfStruct(v); err != nil {
 		return rpcParseError{err: err}
 	}
 
@@ -48,7 +44,7 @@ func (r *rpcContext) GetRequestBody(v any) error {
 }
 
 func (r *rpcContext) GetResponse(v any) (any, error) {
-	if err := Val.Struct(v); err != nil {
+	if err := validateIfStruct(v); err != nil {
 		return nil, errors.New("invalid response from server")
 	}
 	return v, nil

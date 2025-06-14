@@ -31,7 +31,12 @@ func newClientCore(writer *messageWriter) *clientCore {
 }
 
 func (c *clientCore) Call(ctx context.Context, method string, req any, resp any) error {
+	if err := validateIfStruct(req); err != nil {
+		return err
+	}
+
 	id := strconv.FormatInt(atomic.AddInt64(&c.currentID, 1), 36)
+	id = fmt.Sprintf("%06s", id)
 
 	bid, err := json.Marshal(id)
 	if err != nil {
@@ -65,7 +70,10 @@ func (c *clientCore) Call(ctx context.Context, method string, req any, resp any)
 			if v.Error != nil {
 				return fmt.Errorf("RPC error %d: %s", v.Error.Code, v.Error.Message)
 			}
-			return json.Unmarshal(v.Result, resp)
+			if err := json.Unmarshal(v.Result, resp); err != nil {
+				return err
+			}
+			return validateIfStruct(resp)
 		case error:
 			return v
 		default:
