@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type person struct {
+type Person struct {
 	Name string `json:"name" validate:"required"`
 	Age  int    `json:"age" validate:"gte=0"`
 }
@@ -35,7 +35,7 @@ func TestGetRequestBody_WithParams(t *testing.T) {
 	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"name":"John","age":30}`),
 	}}
-	var data person
+	var data Person
 
 	err := ctx.GetRequestBody(&data)
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestGetRequestBody_InvalidJSON(t *testing.T) {
 	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"name":"John","age":invalid}`),
 	}}
-	var data person
+	var data Person
 
 	err := ctx.GetRequestBody(&data)
 	assert.Error(t, err)
@@ -68,7 +68,7 @@ func TestGetRequestBody_NoParams(t *testing.T) {
 	ctx := &rpcContext{req: rpcRequest{
 		Params: nil,
 	}}
-	var data person
+	var data Person
 
 	err := ctx.GetRequestBody(&data)
 	assert.Error(t, err)
@@ -83,7 +83,7 @@ func TestGetRequestBody_ValidationFailed(t *testing.T) {
 	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"age":30}`),
 	}}
-	var data person
+	var data Person
 
 	err := ctx.GetRequestBody(&data)
 	assert.Error(t, err)
@@ -102,7 +102,7 @@ func TestGetRequestBody_NegativeAgeValidationFailed(t *testing.T) {
 	ctx := &rpcContext{req: rpcRequest{
 		Params: json.RawMessage(`{"name":"John","age":-5}`),
 	}}
-	var data person
+	var data Person
 
 	err := ctx.GetRequestBody(&data)
 	assert.Error(t, err)
@@ -118,7 +118,7 @@ func TestGetRequestBody_NegativeAgeValidationFailed(t *testing.T) {
 
 func TestGetResponse_Valid(t *testing.T) {
 	ctx := &rpcContext{}
-	response := person{
+	response := Person{
 		Name: "John",
 		Age:  30,
 	}
@@ -127,7 +127,7 @@ func TestGetResponse_Valid(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check response is returned as-is
-	typedResult, ok := result.(person)
+	typedResult, ok := result.(Person)
 	assert.True(t, ok, "Expected result of type person, got %T", result)
 	assert.Equal(t, "John", typedResult.Name)
 	assert.Equal(t, 30, typedResult.Age)
@@ -135,7 +135,7 @@ func TestGetResponse_Valid(t *testing.T) {
 
 func TestGetResponse_Invalid(t *testing.T) {
 	ctx := &rpcContext{}
-	response := person{
+	response := Person{
 		// Missing required Name field
 		Age: 30,
 	}

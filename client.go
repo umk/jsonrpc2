@@ -68,7 +68,7 @@ func (c *clientCore) Call(ctx context.Context, method string, req any, resp any)
 		switch v := r.(type) {
 		case rpcResponse:
 			if v.Error != nil {
-				return fmt.Errorf("RPC error %d: %s", v.Error.Code, v.Error.Message)
+				return v.Error.asError()
 			}
 			if err := json.Unmarshal(v.Result, resp); err != nil {
 				return err

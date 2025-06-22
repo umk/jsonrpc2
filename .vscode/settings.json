@@ -1,0 +1,15 @@
+{
+  "editor.formatOnSave": true,
+  "[gotmpl]": {
+    "editor.wordWrap": "on"
+  },
+  "[plaintext]": {
+    "editor.wordWrap": "on"
+  },
+  "[markdown]": {
+    "editor.wordWrap": "on"
+  },
+  "[prompt]": {
+    "editor.wordWrap": "on"
+  }
+}

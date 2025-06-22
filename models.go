@@ -25,6 +25,14 @@ type rpcError struct {
 	Data    any    `json:"data,omitempty"`
 }
 
+func (err *rpcError) asError() error {
+	return Error{
+		Code:    err.Code,
+		Message: err.Message,
+		Data:    err.Data,
+	}
+}
+
 // rpcMessage combines the fields of both rpcRequest and rpcResponse.
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
