@@ -23,15 +23,28 @@ func (e rpcParseError) RPCError() Error {
 }
 
 type RPCContext interface {
-	GetRequestBody(v any) error
-	GetResponse(v any) (any, error)
+	ID(v any) error
+	Request(v any) error
+	Response(v any) (any, error)
 }
 
 type rpcContext struct {
 	req rpcRequest
 }
 
-func (r *rpcContext) GetRequestBody(v any) error {
+func (r *rpcContext) ID(v any) error {
+	if r.req.ID == nil {
+		return nil
+	}
+
+	if err := json.Unmarshal(r.req.ID, v); err != nil {
+		return rpcParseError{err: err}
+	}
+
+	return nil
+}
+
+func (r *rpcContext) Request(v any) error {
 	if err := json.Unmarshal(r.req.Params, v); err != nil {
 		return rpcParseError{err: err}
 	}
@@ -43,7 +56,7 @@ func (r *rpcContext) GetRequestBody(v any) error {
 	return nil
 }
 
-func (r *rpcContext) GetResponse(v any) (any, error) {
+func (r *rpcContext) Response(v any) (any, error) {
 	if err := validateIfStruct(v); err != nil {
 		return nil, errors.New("invalid response from server")
 	}
