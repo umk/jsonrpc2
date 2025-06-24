@@ -36,7 +36,7 @@ type clientDispatcher struct {
 }
 
 func (d *clientDispatcher) dispatch(ctx context.Context, buf []byte) error {
-	return d.client.resolve(messageBuf[rpcResponse](buf))
+	return d.client.requestResolve(messageBuf[rpcResponse](buf))
 }
 
 type duplexDispatcher struct {
@@ -55,7 +55,7 @@ func (d *duplexDispatcher) dispatch(ctx context.Context, buf []byte) error {
 			message: message.asRequest(),
 		})
 	} else {
-		return d.client.resolve(messageVal[rpcResponse]{
+		return d.client.requestResolve(messageVal[rpcResponse]{
 			message: message.asResponse(),
 		})
 	}

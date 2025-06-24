@@ -12,6 +12,7 @@ import (
 
 type Client interface {
 	Call(ctx context.Context, method string, req any, resp any) error
+	Notify(ctx context.Context, method string, req any) error
 }
 
 type clientCore struct {
@@ -84,7 +85,37 @@ func (c *clientCore) Call(ctx context.Context, method string, req any, resp any)
 	}
 }
 
-func (c *clientCore) resolve(message message[rpcResponse]) error {
+func (c *clientCore) Notify(ctx context.Context, method string, req any) error {
+	if err := validateIfStruct(req); err != nil {
+		return err
+	}
+
+	breq, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	b, err := json.Marshal(rpcRequest{
+		JSONRPC: "2.0",
+		Method:  method,
+		Params:  json.RawMessage(breq),
+		ID:      nil,
+	})
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.writer.Write(b); err != nil {
+		return fmt.Errorf("failed to write notification: %w", err)
+	}
+
+	return nil
+}
+
+func (c *clientCore) requestResolve(message message[rpcResponse]) error {
 	var resp rpcResponse
 	if err := message.Get(&resp); err != nil {
 		return getDispatchError(err)
@@ -109,7 +140,7 @@ func (c *clientCore) resolve(message message[rpcResponse]) error {
 }
 
 func (c *clientCore) requestSend(id string, req rpcRequest) (chan any, error) {
-	content, err := json.Marshal(req)
+	b, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +155,7 @@ func (c *clientCore) requestSend(id string, req rpcRequest) (chan any, error) {
 	ch := make(chan any, 1)
 	c.requests[id] = ch
 
-	if err := c.writer.Write(content); err != nil {
+	if err := c.writer.Write(b); err != nil {
 		return nil, fmt.Errorf("failed to write request: %w", err)
 	}
 
