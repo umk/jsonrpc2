@@ -2,12 +2,8 @@ package jsonrpc2
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"os/exec"
 	"sync"
-
-	"github.com/umk/jsonrpc2/internal/slices"
 )
 
 type HostOption func(*hostOptions)
@@ -18,12 +14,6 @@ type hostOptions struct {
 
 	client *clientCore // handles client responses
 	server *serverCore // handles server requests
-}
-
-func WithRequestSize(size int) HostOption {
-	return func(opts *hostOptions) {
-		opts.requestSize = size
-	}
 }
 
 func WithClient(client *Client) HostOption {
@@ -44,7 +34,6 @@ func WithServer(handler *Handler) HostOption {
 type Host struct {
 	reader     *messageReader
 	dispatcher dispatcher
-	bufs       *slices.SlicePool[byte]
 }
 
 func NewHost(in io.Reader, out io.Writer, opts ...HostOption) *Host {
@@ -65,23 +54,7 @@ func NewHost(in io.Reader, out io.Writer, opts ...HostOption) *Host {
 	return &Host{
 		reader:     newMessageReader(in),
 		dispatcher: core,
-		bufs:       slices.NewSlicePool[byte](options.requestSize),
 	}
-}
-
-func NewHostFromCmd(cmd *exec.Cmd, opts ...HostOption) (*Host, error) {
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("failed to pipe stdout: %w", err)
-	}
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("failed to pipe stdin: %w", err)
-	}
-
-	h := NewHost(stdout, stdin, opts...)
-	return h, nil
 }
 
 func (h *Host) Run(ctx context.Context) error {
@@ -90,26 +63,23 @@ func (h *Host) Run(ctx context.Context) error {
 	defer wg.Wait()
 
 	for {
-		buf := h.bufs.Get(0)
-		b, err := h.reader.Read(*buf)
-		if err != nil {
-			h.bufs.Put(buf)
+		buf := bufs.Get(0)
+		if err := h.reader.Read(buf); err != nil {
+			bufs.Put(buf)
 			if err == io.EOF {
 				return nil
 			}
 			return err
 		}
 
-		buf = &b
-
 		wg.Add(1)
-		go func(buf *[]byte) {
+		go func() {
 			defer wg.Done()
-			defer h.bufs.Put(buf)
+			defer bufs.Put(buf)
 
 			if err := h.dispatcher.dispatch(ctx, *buf); err != nil {
 				// Do nothing
 			}
-		}(buf)
+		}()
 	}
 }

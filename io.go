@@ -46,19 +46,19 @@ func newMessageReader(in io.Reader) *messageReader {
 
 // Read reads a complete line from reader into input buffer
 // handling any line prefixes correctly. It accepts reusable buffer
-// and returns a line in either the same or a new buffer.
-func (r *messageReader) Read(buf []byte) ([]byte, error) {
-	buf = buf[:0]
+// and resizes it as needed. The buffer is expected to be empty.
+func (r *messageReader) Read(buf *[]byte) error {
+	*buf = (*buf)[:0]
 
 	for proceed := true; proceed; {
 		line, isPrefix, err := r.reader.ReadLine()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		buf = append(buf, line...)
+		*buf = append(*buf, line...)
 		proceed = isPrefix
 	}
 
-	return buf, nil
+	return nil
 }
