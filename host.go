@@ -9,8 +9,7 @@ import (
 type HostOption func(*hostOptions)
 
 type hostOptions struct {
-	writer      *messageWriter // writer for sending responses
-	requestSize int            // average size of messages
+	writer *messageWriter // writer for sending responses
 
 	client *clientCore // handles client responses
 	server *serverCore // handles server requests
@@ -38,8 +37,7 @@ type Host struct {
 
 func NewHost(in io.Reader, out io.Writer, opts ...HostOption) *Host {
 	options := hostOptions{
-		writer:      newMessageWriter(out),
-		requestSize: 4 * 1024,
+		writer: newMessageWriter(out),
 	}
 
 	for _, opt := range opts {
