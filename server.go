@@ -3,8 +3,10 @@ package jsonrpc2
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"os/exec"
 	"sync"
 )
 
@@ -24,6 +26,14 @@ func NewServer(runner Runner) *Server {
 		shutdown: make(chan struct{}),
 		runner:   runner,
 	}
+}
+
+func (s *Server) Close() error {
+	s.once.Do(func() {
+		close(s.shutdown)
+	})
+
+	return nil
 }
 
 func (s *Server) ServeFromIO(ctx context.Context, in io.ReadCloser, out io.Writer) error {
@@ -68,12 +78,14 @@ func (s *Server) ServeFromNetwork(ctx context.Context, network, address string) 
 
 			defer func() {
 				conn.Close()
+				logger.Printf("done serving connection %d\n", i)
 				wg.Done()
 			}()
 
 			go func() {
 				<-s.shutdown
 				// Close the connection when server is shutting down
+				logger.Printf("closing connection %d due to shutdown\n", i)
 				conn.Close()
 			}()
 
@@ -84,10 +96,16 @@ func (s *Server) ServeFromNetwork(ctx context.Context, network, address string) 
 	}
 }
 
-func (s *Server) Close() error {
-	s.once.Do(func() {
-		close(s.shutdown)
-	})
+func (s *Server) ServeFromCmd(ctx context.Context, cmd *exec.Cmd) error {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to pipe Stdout: %w", err)
+	}
 
-	return nil
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to pipe Stdin: %w", err)
+	}
+
+	return s.runner.Run(ctx, stdout, stdin)
 }
