@@ -36,13 +36,26 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func (s *Server) ServeFromIO(ctx context.Context, in io.ReadCloser, out io.Writer) error {
+func (s *Server) ServeFromIO(ctx context.Context, in io.Reader, out io.Writer) error {
+	pr, pw := io.Pipe()
+
 	go func() {
-		<-s.shutdown
-		in.Close()
+		_, err := io.Copy(pw, in)
+		pw.CloseWithError(err)
 	}()
 
-	return s.runner.Run(ctx, in, out)
+	go func() {
+		<-s.shutdown
+		pr.Close()
+	}()
+
+	if err := s.runner.Run(ctx, pr, out); err != nil {
+		if !errors.Is(err, io.ErrClosedPipe) {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *Server) ServeFromNetwork(ctx context.Context, network, address string) error {

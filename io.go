@@ -57,7 +57,10 @@ func (r *messageReader) Read(buf *[]byte) error {
 		}
 
 		*buf = append(*buf, line...)
-		proceed = isPrefix
+
+		// If the buffer is still empty after reading, force another read iteration
+		// to ensure a non-empty line is read.
+		proceed = isPrefix || len(*buf) == 0
 	}
 
 	return nil
